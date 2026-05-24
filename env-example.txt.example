@@ -1,0 +1,14 @@
+# Binance API Keys
+# Get from: https://www.binance.com/en/my/settings/api-management
+# IMPORTANT: Enable ONLY "Enable Spot & Margin Trading". DO NOT enable withdrawals.
+BINANCE_API_KEY=your_api_key_here
+BINANCE_API_SECRET=your_api_secret_here
+
+# Set to "true" for testnet (recommended for first testing)
+# Testnet: https://testnet.binance.vision/
+USE_TESTNET=false
+
+# Optional: Telegram notifications
+# Create bot via @BotFather, get chat ID from @userinfobot
+TELEGRAM_TOKEN=
+TELEGRAM_CHAT_ID=
