@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Trading Bot Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background: #0a0a0f;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass {
+            background: rgba(20, 20, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #00d4ff20 0%, #7c3aed20 100%);
+        }
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+        }
+        .log-line {
+            font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+        .signal-bar {
+            transition: all 0.3s ease;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        .scroll-snap-x {
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+        }
+        .scroll-snap-item { scroll-snap-align: start; }
+
+        .number-tabular {
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+        }
+    </style>
+</head>
+<body class="text-white min-h-screen">
+    <!-- Background gradient -->
+    <div class="fixed inset-0 -z-10 overflow-hidden">
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500 rounded-full opacity-10 blur-3xl"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full opacity-10 blur-3xl"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
+
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold gradient-text">🤖 Trading Bot</h1>
+                <p class="text-xs md:text-sm text-gray-400 mt-1">
+                    <span id="last-update">Loading...</span>
+                </p>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="status-badge" class="glass rounded-full px-4 py-2 flex items-center gap-2 text-sm">
+                    <span class="w-2 h-2 rounded-full bg-gray-500" id="status-dot"></span>
+                    <span id="status-text">Connecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Top Stats - Big Portfolio Card -->
+        <div class="glass rounded-3xl p-6 md:p-8 gradient-bg">
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <p class="text-sm text-gray-400 mb-1">Portfolio Value</p>
+                    <p class="text-4xl md:text-6xl font-bold number-tabular" id="portfolio-value">$0.00</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-400 mb-1">P&L</p>
+                    <p class="text-lg md:text-2xl font-bold number-tabular" id="pnl-value">$0.00</p>
+                    <p class="text-sm number-tabular" id="pnl-percent">+0.00%</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 md:gap-6 mt-6">
+                <div>
+                    <p class="text-xs text-gray-400">Starting</p>
+                    <p class="text-base md:text-lg font-semibold number-tabular" id="starting-balance">$0.00</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-400">Trades</p>
+                    <p class="text-base md:text-lg font-semibold number-tabular" id="total-trades">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-400">Win Rate</p>
+                    <p class="text-base md:text-lg font-semibold number-tabular" id="win-rate">0.0%</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="glass rounded-3xl p-4 md:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">📈 Portfolio History</h2>
+                <span class="text-xs text-gray-400">Live</span>
+            </div>
+            <div class="h-48 md:h-64">
+                <canvas id="portfolio-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Coins Grid -->
+        <div class="glass rounded-3xl p-4 md:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">🪙 Market Signals</h2>
+                <span class="text-xs text-gray-400">5 pairs</span>
+            </div>
+            <div id="coins-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div class="text-center text-gray-500 col-span-full py-4">Loading market data...</div>
+            </div>
+        </div>
+
+        <!-- Open Positions -->
+        <div class="glass rounded-3xl p-4 md:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">📊 Open Positions</h2>
+                <span class="text-xs text-gray-400" id="positions-count">0</span>
+            </div>
+            <div id="positions-list" class="space-y-2">
+                <div class="text-center text-gray-500 py-4">No open positions</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="glass rounded-3xl p-4 md:p-6">
+            <h2 class="text-lg font-semibold mb-4">🎛️ Bot Controls</h2>
+            <div class="grid grid-cols-3 gap-3">
+                <button onclick="controlBot('start')" class="bg-green-600 hover:bg-green-700 active:scale-95 transition-all rounded-2xl py-3 font-semibold text-sm">
+                    ▶ Start
+                </button>
+                <button onclick="controlBot('restart')" class="bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all rounded-2xl py-3 font-semibold text-sm">
+                    🔄 Restart
+                </button>
+                <button onclick="controlBot('stop')" class="bg-red-600 hover:bg-red-700 active:scale-95 transition-all rounded-2xl py-3 font-semibold text-sm">
+                    ⏸ Stop
+                </button>
+            </div>
+            <div id="control-message" class="mt-3 text-sm text-center text-gray-400"></div>
+        </div>
+
+        <!-- Logs -->
+        <div class="glass rounded-3xl p-4 md:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">📜 Live Logs</h2>
+                <button onclick="toggleAutoScroll()" id="autoscroll-btn" class="text-xs text-gray-400 hover:text-white">
+                    Auto-scroll: ON
+                </button>
+            </div>
+            <div id="logs-container" class="bg-black/40 rounded-2xl p-3 h-64 md:h-80 overflow-y-auto">
+                <div class="text-gray-500 text-sm">Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center text-xs text-gray-500 py-4">
+            <p>Smart Trading Bot Dashboard · v1.0</p>
+            <p class="mt-1">Built with ❤️ for Dhiab</p>
+        </footer>
+    </div>
+
+    <script>
+        // ============================================================
+        // STATE
+        // ============================================================
+        let autoScroll = true;
+        let chart = null;
+        let lastLogCount = 0;
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+        function formatMoney(num) {
+            return '$' + Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function formatPercent(num) {
+            const sign = num >= 0 ? '+' : '';
+            return sign + Number(num).toFixed(2) + '%';
+        }
+
+        function getCompositeColor(val) {
+            if (val >= 0.4) return 'text-green-400';
+            if (val >= 0.1) return 'text-green-300';
+            if (val <= -0.4) return 'text-red-400';
+            if (val <= -0.1) return 'text-red-300';
+            return 'text-gray-400';
+        }
+
+        function getRegimeIcon(regime) {
+            if (regime === 'uptrend') return '📈';
+            if (regime === 'downtrend') return '📉';
+            if (regime === 'ranging') return '➡️';
+            return '❓';
+        }
+
+        function getRegimeColor(regime) {
+            if (regime === 'uptrend') return 'text-green-400';
+            if (regime === 'downtrend') return 'text-red-400';
+            return 'text-yellow-400';
+        }
+
+        // ============================================================
+        // FETCH DATA
+        // ============================================================
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) throw new Error('Auth failed');
+                const data = await res.json();
+
+                // Status badge
+                const dot = document.getElementById('status-dot');
+                const text = document.getElementById('status-text');
+                if (data.bot_running) {
+                    dot.className = 'w-2 h-2 rounded-full bg-green-500 pulse-dot';
+                    text.textContent = 'Bot Running';
+                } else {
+                    dot.className = 'w-2 h-2 rounded-full bg-red-500';
+                    text.textContent = 'Bot Stopped';
+                }
+
+                if (data.halted) {
+                    text.textContent = '🛑 Bot Halted';
+                    dot.className = 'w-2 h-2 rounded-full bg-yellow-500';
+                }
+
+                // Portfolio
+                document.getElementById('portfolio-value').textContent = formatMoney(data.current_balance);
+                document.getElementById('starting-balance').textContent = formatMoney(data.starting_balance);
+
+                const pnlEl = document.getElementById('pnl-value');
+                const pnlPctEl = document.getElementById('pnl-percent');
+                pnlEl.textContent = formatMoney(data.pnl);
+                pnlPctEl.textContent = formatPercent(data.pnl_percent);
+
+                const pnlColor = data.pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                pnlEl.className = 'text-lg md:text-2xl font-bold number-tabular ' + pnlColor;
+                pnlPctEl.className = 'text-sm number-tabular ' + pnlColor;
+
+                // Stats
+                document.getElementById('total-trades').textContent = data.total_trades;
+                document.getElementById('win-rate').textContent = data.win_rate.toFixed(1) + '%';
+
+                // Last update
+                const lu = new Date(data.last_update);
+                document.getElementById('last-update').textContent = 'Last update: ' + lu.toLocaleTimeString();
+
+                // Signals
+                renderSignals(data.signals);
+
+                // Positions
+                renderPositions(data.open_positions_data || {});
+
+            } catch (e) {
+                document.getElementById('status-text').textContent = 'Connection Error';
+                document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+                console.error(e);
+            }
+        }
+
+        function renderSignals(signals) {
+            const grid = document.getElementById('coins-grid');
+            if (!signals || signals.length === 0) {
+                grid.innerHTML = '<div class="text-center text-gray-500 col-span-full py-4">Waiting for signals...</div>';
+                return;
+            }
+
+            const coinIcons = {
+                'BTCUSDT': '₿',
+                'ETHUSDT': 'Ξ',
+                'BNBUSDT': '🅑',
+                'SOLUSDT': '◎',
+                'XRPUSDT': '✕',
+            };
+
+            grid.innerHTML = signals.map(s => `
+                <div class="glass rounded-2xl p-4 hover:scale-[1.02] transition-transform">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-2xl">${coinIcons[s.symbol] || '🪙'}</span>
+                            <span class="font-semibold text-sm">${s.symbol.replace('USDT', '')}</span>
+                        </div>
+                        <span class="text-xs ${getRegimeColor(s.regime)}">${getRegimeIcon(s.regime)} ${s.regime}</span>
+                    </div>
+                    <div class="text-2xl font-bold number-tabular ${getCompositeColor(s.composite)}">
+                        ${s.composite >= 0 ? '+' : ''}${s.composite.toFixed(3)}
+                    </div>
+                    <div class="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div class="h-full signal-bar ${s.composite >= 0 ? 'bg-green-400' : 'bg-red-400'}"
+                             style="width: ${Math.min(100, Math.abs(s.composite) * 100)}%; margin-left: ${s.composite < 0 ? 'auto' : '0'}"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPositions(positions) {
+            const list = document.getElementById('positions-list');
+            const count = document.getElementById('positions-count');
+            const keys = Object.keys(positions);
+            count.textContent = keys.length + ' open';
+
+            if (keys.length === 0) {
+                list.innerHTML = '<div class="text-center text-gray-500 py-4">No open positions</div>';
+                return;
+            }
+
+            list.innerHTML = keys.map(symbol => {
+                const p = positions[symbol];
+                return `
+                    <div class="glass rounded-2xl p-4 flex items-center justify-between">
+                        <div>
+                            <p class="font-semibold">${symbol}</p>
+                            <p class="text-xs text-gray-400">Qty: ${p.quantity || 'N/A'} @ ${formatMoney(p.entry_price || 0)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-400">Entry</p>
+                            <p class="font-semibold number-tabular">${formatMoney(p.entry_price || 0)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ============================================================
+        // LOGS
+        // ============================================================
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs?lines=200');
+                if (!res.ok) return;
+                const data = await res.json();
+                renderLogs(data.logs);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderLogs(logs) {
+            const container = document.getElementById('logs-container');
+            if (!logs || logs.length === 0) {
+                container.innerHTML = '<div class="text-gray-500 text-sm">No logs yet</div>';
+                return;
+            }
+
+            container.innerHTML = logs.map(line => {
+                let color = 'text-gray-300';
+                if (line.includes('ERROR')) color = 'text-red-400';
+                else if (line.includes('WARNING')) color = 'text-yellow-400';
+                else if (line.includes('✅') || line.includes('BUY')) color = 'text-green-400';
+                else if (line.includes('SELL')) color = 'text-blue-400';
+                else if (line.includes('Claude')) color = 'text-purple-400';
+
+                return `<div class="log-line ${color} mb-0.5">${escapeHtml(line)}</div>`;
+            }).join('');
+
+            if (autoScroll) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function escapeHtml(s) {
+            return s.replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            document.getElementById('autoscroll-btn').textContent =
+                'Auto-scroll: ' + (autoScroll ? 'ON' : 'OFF');
+        }
+
+        // ============================================================
+        // CHART
+        // ============================================================
+        async function fetchHistory() {
+            try {
+                const res = await fetch('/api/history');
+                if (!res.ok) return;
+                const data = await res.json();
+                renderChart(data.history);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderChart(history) {
+            const ctx = document.getElementById('portfolio-chart');
+            if (!ctx || !history || history.length === 0) return;
+
+            const labels = history.map(h => h.time.split(' ')[1] || '');
+            const values = history.map(h => h.value);
+
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = values;
+                chart.update('none');
+                return;
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Portfolio',
+                        data: values,
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(20,20,30,0.95)',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            callbacks: {
+                                label: ctx => '$' + ctx.parsed.y.toFixed(2)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#666', maxTicksLimit: 6, font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#666',
+                                font: { size: 10 },
+                                callback: v => '$' + v
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // CONTROLS
+        // ============================================================
+        async function controlBot(action) {
+            const msg = document.getElementById('control-message');
+            msg.textContent = '⏳ Processing...';
+            try {
+                const res = await fetch('/api/bot/' + action, { method: 'POST' });
+                const data = await res.json();
+                msg.textContent = data.success ? '✅ ' + data.message : '❌ ' + (data.error || 'Failed');
+                setTimeout(() => msg.textContent = '', 3000);
+                setTimeout(fetchStatus, 1500);
+            } catch (e) {
+                msg.textContent = '❌ Network error';
+            }
+        }
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        fetchStatus();
+        fetchLogs();
+        fetchHistory();
+
+        setInterval(fetchStatus, 5000);
+        setInterval(fetchLogs, 5000);
+        setInterval(fetchHistory, 30000);
+    </script>
+</body>
+</html>
